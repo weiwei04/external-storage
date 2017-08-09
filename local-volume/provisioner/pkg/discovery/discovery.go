@@ -92,9 +92,12 @@ func (d *Discoverer) discoverVolumesAtPath(class string, config common.MountConf
 		return
 	}
 
+	backedPVs := make(map[string]struct{})
+	// check for new disk/dir
 	for _, file := range files {
 		// Check if PV already exists for it
 		pvName := generatePVName(file, d.Node.Name, class)
+		backedPVs[pvName] = struct{}{}
 		_, exists := d.Cache.GetPV(pvName)
 		if exists {
 			continue
@@ -127,6 +130,18 @@ func (d *Discoverer) discoverVolumesAtPath(class string, config common.MountConf
 		}
 
 		d.createPV(file, class, config, capacityByte, volType)
+	}
+
+	// cleanup removed disk/dir
+	for _, pv := range d.Cache.ListPVs() {
+		if _, ok := backedPVs[pv.Name]; ok {
+			continue
+		}
+		if pv.Status.Phase == v1.VolumeBound {
+			glog.Errorf("Missing backend storage media for pv %s", pv.Name)
+		} else {
+			d.deletePV(pv)
+		}
 	}
 }
 
@@ -176,4 +191,14 @@ func (d *Discoverer) createPV(file, class string, config common.MountConfig, cap
 		return
 	}
 	glog.Infof("Created PV %q for volume at %q", pvName, outsidePath)
+}
+
+func (d *Discoverer) deletePV(pv *v1.PersistentVolume) {
+	err := d.APIUtil.DeletePV(pv.Name)
+	if err != nil {
+		deletingLocalPVErr := fmt.Errorf("Error deleting PV %q: %v", pv.Name, err.Error())
+		d.RuntimeConfig.Recorder.Eventf(pv, v1.EventTypeWarning, common.EventVolumeFailedDelete, deletingLocalPVErr.Error())
+		return
+	}
+	glog.Infof("Deleted PV %q", pv)
 }

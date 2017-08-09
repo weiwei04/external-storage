@@ -180,6 +180,49 @@ func TestDiscoverVolumes_NewVolumesLater(t *testing.T) {
 	verifyCreatedPVs(t, test)
 }
 
+func TestDiscoverVolumes_RemoveVolumesLater(t *testing.T) {
+	vols := map[string][]*util.FakeDirEntry{
+		"dir1": {
+			{Name: "mount1", Hash: 0xaaaafef5, VolumeType: util.FakeEntryFile},
+			{Name: "mount2", Hash: 0x79412c38, VolumeType: util.FakeEntryBlock},
+		},
+		"dir2": {
+			{Name: "mount1", Hash: 0xa7aafa3c, VolumeType: util.FakeEntryFile},
+			{Name: "mount2", Hash: 0x7c4130f1, VolumeType: util.FakeEntryBlock},
+		},
+	}
+	test := &testConfig{
+		dirLayout:       vols,
+		expectedVolumes: vols,
+	}
+	d := testSetup(t, test)
+
+	d.DiscoverLocalVolumes()
+
+	verifyCreatedPVs(t, test)
+
+	// Some disk unmounted or dir deleted
+	delVols := map[string][]*util.FakeDirEntry{
+		"dir1": {
+			{Name: "mount1", Hash: 0xf34b8003, VolumeType: util.FakeEntryFile},
+		},
+	}
+	test.volUtil.RemoveDirEntries(testMountDir, delVols)
+	test.expectedVolumes = map[string][]*util.FakeDirEntry{
+		"dir1": {
+			{Name: "mount2", Hash: 0x79412c38, VolumeType: util.FakeEntryBlock},
+		},
+		"dir2": {
+			{Name: "mount1", Hash: 0xa7aafa3c, VolumeType: util.FakeEntryFile},
+			{Name: "mount2", Hash: 0x7c4130f1, VolumeType: util.FakeEntryBlock},
+		},
+	}
+
+	d.DiscoverLocalVolumes()
+
+	verifyCreatedPVs(t, test)
+}
+
 func TestDiscoverVolumes_CreatePVFails(t *testing.T) {
 	vols := map[string][]*util.FakeDirEntry{
 		"dir1": {

@@ -18,14 +18,16 @@ package util
 
 import (
 	"fmt"
-	"golang.org/x/sys/unix"
 	"os"
 	"path/filepath"
 
+	"golang.org/x/sys/unix"
+
 	"github.com/golang/glog"
 
-	"k8s.io/kubernetes/pkg/volume/util"
 	"unsafe"
+
+	"k8s.io/kubernetes/pkg/volume/util"
 )
 
 // VolumeUtil is an interface for local filesystem operations
@@ -285,5 +287,22 @@ func (u *FakeVolumeUtil) AddNewDirEntries(mountDir string, dirFiles map[string][
 		}
 		glog.Infof("Adding to directory %q: files %v\n", dir, files)
 		u.directoryFiles[mountedPath] = append(curFiles, files...)
+	}
+}
+
+func (u *FakeVolumeUtil) RemoveDirEntries(mountDir string, dirFiles map[string][]*FakeDirEntry) {
+	for dir, files := range dirFiles {
+		mountedPath := filepath.Join(mountDir, dir)
+		needRemoveFiles := make(map[string]struct{})
+		for _, file := range files {
+			needRemoveFiles[file.Name] = struct{}{}
+		}
+		files := []*FakeDirEntry{}
+		for _, file := range u.directoryFiles[mountedPath] {
+			if _, ok := needRemoveFiles[file.Name]; !ok {
+				files = append(files, file)
+			}
+		}
+		u.directoryFiles[mountedPath] = files
 	}
 }
